@@ -1,4 +1,5 @@
 import { Router } from "express";
+
 import {
     registerUser,
     loginUser,
@@ -6,6 +7,13 @@ import {
     refreshAccessToken,
     changeCurrentPassword,
     getCurrentUser,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateUserCoverImage,
+    getWatchHistory,
+    addToWatchLater,
+    removeFromWatchLater,
+    getWatchLater,
 } from "../controllers/user.controller.js";
 
 import { upload } from "../middlewares/multer.middleware.js";
@@ -28,11 +36,32 @@ router.route("/register").post(
 );
 
 router.route("/login").post(loginUser);
+router.route("/refresh-token").post(refreshAccessToken);
 
 // secured routes
 router.route("/logout").post(verifyJWT, logoutUser);
-router.route("/refresh-token").post(refreshAccessToken);
 router.route("/change-password").post(verifyJWT, changeCurrentPassword);
 router.route("/current-user").get(verifyJWT, getCurrentUser);
+
+router.route("/update-account").patch(verifyJWT, updateAccountDetails);
+
+router.route("/avatar").patch(
+    verifyJWT,
+    upload.single("avatar"),
+    updateUserAvatar
+);
+
+router.route("/cover-image").patch(
+    verifyJWT,
+    upload.single("coverImage"),
+    updateUserCoverImage
+);
+
+router.route("/history").get(verifyJWT, getWatchHistory);
+
+// extra feature: watch later
+router.route("/watch-later").get(verifyJWT, getWatchLater);
+router.route("/watch-later/:videoId").post(verifyJWT, addToWatchLater);
+router.route("/watch-later/:videoId").delete(verifyJWT, removeFromWatchLater);
 
 export default router;

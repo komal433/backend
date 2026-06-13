@@ -1,9 +1,12 @@
+import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
+
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import { User } from "../models/user.model.js";
-import { uploadonCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import jwt from "jsonwebtoken";
+import { User } from "../models/user.model.js";
+import { Video } from "../models/video.model.js";
+import { uploadonCloudinary } from "../utils/cloudinary.js";
 
 const generateAccessAndRefreshTokens = async (userId) => {
     try {
@@ -43,16 +46,8 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(409, "User with email or username already exists");
     }
 
-    let avatarLocalPath;
-    let coverImageLocalPath;
-
-    if (req.files && req.files.avatar && req.files.avatar.length > 0) {
-        avatarLocalPath = req.files.avatar[0].path;
-    }
-
-    if (req.files && req.files.coverImage && req.files.coverImage.length > 0) {
-        coverImageLocalPath = req.files.coverImage[0].path;
-    }
+    const avatarLocalPath = req.files?.avatar?.[0]?.path;
+    const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
 
     if (!avatarLocalPath) {
         throw new ApiError(400, "Avatar file is required");
@@ -233,7 +228,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     }
 
     user.password = newPassword;
-    await user.save({ validateBeforeSave: false });
+    await user.save();
 
     return res
         .status(200)
@@ -246,6 +241,182 @@ const getCurrentUser = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, req.user, "Current user fetched successfully"));
 });
 
+const updateAccountDetails = asyncHandler(async (req, res) => {
+    const { fullname, email } = req.body;
+
+    if (!fullname || !email) {
+        throw new ApiError(400, "Fullname and email are required");
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                fullname,
+                email,
+            },
+        },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, user, "Account details updated successfully"));
+});
+
+const updateUserAvatar = asyncHandler(async (req, res) => {
+    const avatarLocalPath = req.file?.path;
+
+    if (!avatarLocalPath) {
+        throw new ApiError(400, "Avatar file is missing");
+    }
+
+    const avatar = await uploadonCloudinary(avatarLocalPath);
+
+    if (!avatar?.url) {
+        throw new ApiError(400, "Error while uploading avatar");
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                avatar: avatar.url,
+            },
+        },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, user, "Avatar updated successfully"));
+});
+
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+    const coverImageLocalPath = req.file?.path;
+
+    if (!coverImageLocalPath) {
+        throw new ApiError(400, "Cover image file is missing");
+    }
+
+    const coverImage = await uploadonCloudinary(coverImageLocalPath);
+
+    if (!coverImage?.url) {
+        throw new ApiError(400, "Error while uploading cover image");
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $set: {
+                coverImage: coverImage.url,
+            },
+        },
+        { new: true }
+    ).select("-password -refreshToken");
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, user, "Cover image updated successfully"));
+});
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id)
+        .populate({
+            path: "watchHistory",
+            populate: {
+                path: "owner",
+                select: "fullname username avatar",
+            },
+        })
+        .select("watchHistory");
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                user.watchHistory,
+                "Watch history fetched successfully"
+            )
+        );
+});
+
+const addToWatchLater = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+
+    if (!mongoose.isValidObjectId(videoId)) {
+        throw new ApiError(400, "Invalid video id");
+    }
+
+    const video = await Video.findById(videoId);
+
+    if (!video) {
+        throw new ApiError(404, "Video not found");
+    }
+
+    const user = await User.findById(req.user?._id);
+
+    const alreadyExists = user.watchLater.some(
+        (id) => id.toString() === videoId
+    );
+
+    if (alreadyExists) {
+        throw new ApiError(409, "Video already exists in watch later");
+    }
+
+    user.watchLater.push(videoId);
+    await user.save({ validateBeforeSave: false });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Video added to watch later"));
+});
+
+const removeFromWatchLater = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+
+    if (!mongoose.isValidObjectId(videoId)) {
+        throw new ApiError(400, "Invalid video id");
+    }
+
+    await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+            $pull: {
+                watchLater: videoId,
+            },
+        },
+        { new: true }
+    );
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Video removed from watch later"));
+});
+
+const getWatchLater = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user?._id)
+        .populate({
+            path: "watchLater",
+            populate: {
+                path: "owner",
+                select: "fullname username avatar",
+            },
+        })
+        .select("watchLater");
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                user.watchLater,
+                "Watch later videos fetched successfully"
+            )
+        );
+});
+
 export {
     registerUser,
     loginUser,
@@ -253,4 +424,11 @@ export {
     refreshAccessToken,
     changeCurrentPassword,
     getCurrentUser,
+    updateAccountDetails,
+    updateUserAvatar,
+    updateUserCoverImage,
+    getWatchHistory,
+    addToWatchLater,
+    removeFromWatchLater,
+    getWatchLater,
 };
