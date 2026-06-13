@@ -1,7 +1,7 @@
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser"
-
+import videoRouter from "./routes/video.routes.js";
 const app = express()
 app.use((req, res, next) => {
   console.log("REQUEST HIT:", req.method, req.url);
@@ -23,7 +23,7 @@ console.log("✅ userRouter imported:", userRouter ? "Yes" : "No");
 
 //routes declaration
 app.use("/api/v1/users",userRouter)//whoeever presses users one will handle to userrouter
-
+app.use("/api/v1/videos", videoRouter);
 //http://localhost:8000/api/v1/user/register
 
 export { app }

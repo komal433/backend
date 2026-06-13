@@ -356,16 +356,20 @@ const addToWatchLater = asyncHandler(async (req, res) => {
     }
 
     const user = await User.findById(req.user?._id);
+if (!user.watchLater) {
+    user.watchLater = [];
+}
 
-    const alreadyExists = user.watchLater.some(
-        (id) => id.toString() === videoId
-    );
+const alreadyExists = user.watchLater.some(
+    (id) => id.toString() === videoId
+);
 
-    if (alreadyExists) {
-        throw new ApiError(409, "Video already exists in watch later");
-    }
+if (alreadyExists) {
+    throw new ApiError(409, "Video already exists in watch later");
+}
 
-    user.watchLater.push(videoId);
+user.watchLater.push(videoId);
+    
     await user.save({ validateBeforeSave: false });
 
     return res
